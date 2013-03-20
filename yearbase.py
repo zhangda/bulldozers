@@ -2,7 +2,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-import util, random, types, sys
+import util, random, types, sys, math
 
 def get_date_dataframe(date_column):
     return pd.DataFrame({
@@ -62,7 +62,7 @@ def train_year(train_fea, trees):
             rf = rfs[years.index(p[0])]
             y2_p = rf.predict(y2_fea)
             y2_r = np.array([v for v in y2['SalePrice']])
-            error_rates = np.array(map(lambda x,y: (x-y)/y, y2_p, y2_r))
+            error_rates = np.array(map(lambda x,y: math.fabs(x-y)/y, y2_p, y2_r))
             if type(errors)==types.NoneType:
                 errors = pd.DataFrame({'dist':i, 'mean':error_rates.mean(), 'var':error_rates.var(), 'std':error_rates.std()}, index=[i])
             else:
@@ -73,13 +73,17 @@ def train_year(train_fea, trees):
     return rfs, errors_list
 
 def predict(test_fea, rfs, errors):
+    size = len([e for e in errors if e<0.5])
+    print 'only use recent years %d' % (size)
+    errors, rfs = errors[:size], rfs[-size:]
     error_sum = np.array(errors).sum()
     p = None
     for i in range(0,len(errors)):
+        print 'weight %f' % (errors[i]/error_sum)
         if i==0:
-            p = rfs[i+1].predict(test_fea)*(errors[i]/error_sum)
+            p = rfs[i].predict(test_fea)*(errors[i]/error_sum)
         else:
-            p = p + rfs[i+1].predict(test_fea)*(errors[i]/error_sum)
+            p = p + rfs[i].predict(test_fea)*(errors[i]/error_sum)
     
     util.write_submission("result.csv", np.array(p))
 
