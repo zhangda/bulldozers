@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import util,random, types
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression
 
 def get_date_dataframe(date_column):
     return pd.DataFrame({
@@ -52,6 +53,7 @@ def train(algos, train_fea, test_fea, nloop, nfold):
     validation = None
     prediction = None
     for i in range(0, nloop):
+        print 'loop %d' % (i)
         train, test = split_train(train_fea, nfold)
         train = train.set_index([range(0,train.shape[0])])
         test = test.set_index([range(0,test.shape[0])])
@@ -59,28 +61,47 @@ def train(algos, train_fea, test_fea, nloop, nfold):
         test_label_table = pd.DataFrame(test_label)
         del train['SalePrice']
         del test['SalePrice']
-        for algo in algos:
+        tmp_v = None
+        tmp_p = None
+        for j, algo in enumerate(algos):
+            print 'algo %d' % (j)
             algo.fit(train, train_label)
             v = algo.predict(test)
             p = algo.predict(test_fea)
-            if type(validation) == types.NoneType:
-                validation = pd.DataFrame({str(i): v})
+            if type(tmp_v) == types.NoneType:
+                tmp_v, tmp_p = pd.DataFrame({j: v}), pd.DataFrame({j: p}, index=None)
             else:
-                validation = validation.join(pd.DataFrame({str(i): v}))
-            if type(prediction) == types.NoneType:
-                prediction = pd.DataFrame({str(i): p})
-            else:
-                prediction = prediction.join(pd.DataFrame({str(i): p}))
-        validation = validation.join(test_label_table)
-    return validation, prediction
+                tmp_v = tmp_v.join(pd.DataFrame({j: v}, index=None))
+                tmp_p = tmp_p.join(pd.DataFrame({j: p}, index=None))
+        tmp_v = tmp_v.join(test_label_table)
+        if type(validation) == types.NoneType:
+            validation, prediction = tmp_v, tmp_p
+        else:
+            validation = validation.append(tmp_v)
+            prediction = prediction + tmp_p
+    return validation, prediction/nloop
 
-
-
-    
-    return prediction
+def predict(validation, prediction):
+    lr = LinearRegression()
+    v_label = validation['SalePrice']
+    del validation['SalePrice']
+    lr.fit(validation, v_label)
+    p = lr.predict(prediction)
+    util.write_submission("result.csv", p)
        
-    #rf = RandomForestRegressor(n_estimators=10, n_jobs=1, compute_importances = True)
-    #et = ExtraTreesRegressor(n_estimators=100, n_jobs=1, compute_importances = True)
-    #gb = GradientBoostingRegressor(n_estimators=100)
-    
-#util.write_submission("result.csv", predictions)
+   
+def main():
+    train_fea, test_fea = clean_df()
+    rf1 = RandomForestRegressor(n_estimators=50, n_jobs=-1)
+    rf2 = RandomForestRegressor(n_estimators=50, n_jobs=-1)
+    et1 = ExtraTreesRegressor(n_estimators=50, n_jobs=-1)
+    et2 = ExtraTreesRegressor(n_estimators=50, n_jobs=-1)
+    #gb1 = GradientBoostingRegressor(n_estimators=100, learning_rate=0.05, max_depth=10)
+    #gb2 = GradientBoostingRegressor(n_estimators=100,learning_rate=0.05, max_depth=10)
+    v, p = train([rf1, rf2, et1, et2], train_fea, test_fea, 2, 5)
+    predict(v, p)
+
+
+if __name__ == "__main__":
+    main()
+
